@@ -1,0 +1,50 @@
+FROM centos:8
+ENV container podman
+
+## repository update
+RUN sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-Linux-*
+RUN sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-Linux-*
+RUN yum swap -y fakesystemd systemd
+RUN yum update -y
+
+## packages install
+RUN yum install openssh-server chrony openssh-clients nc firewalld dnf curl git bind bind-utils wget -y
+RUN yum clean all
+RUN rpm --import https://www.elrepo.org/RPM-GPG-KEY-elrepo.org
+
+## various settings
+RUN yum install -y elrepo-release
+RUN sed -ri 's/^UsePAM yes/UsePAM no/' /etc/ssh/sshd_config
+RUN sed -ri 's/PermitRootLogin without-password/PermitRootLogin yes/g' /etc/ssh/sshd_config
+RUN sed -ri 's/#PasswordAuthentication/PasswordAuthentication/g' /etc/ssh/sshd_config
+COPY ../chrony/chrony.conf /etc
+RUN systemctl enable chronyd.service
+RUN systemctl enable sshd.service
+RUN ln -sf /usr/share/zoneinfo/Asia/Tokyo /etc/localtime
+RUN echo 'root:root' | chpasswd
+RUN ssh-keygen -t rsa -f /etc/ssh/ssh_host_rsa_key -N ''
+RUN systemctl disable firewalld
+
+## k8s
+RUN echo -e "net.bridge.bridge-nf-call-ip6tables = 1\n\
+net.bridge.bridge-nf-call-iptables = 1" > /etc/sysctl.d/k8s.conf
+
+RUN echo -e "10.89.0.15 k8m001\n\
+10.89.0.16 k8w001\n\
+10.89.0.17 k8w002" >> /etc/hosts
+
+RUN echo -e "[kubernetes]\n\
+name=Kubernetes\n\
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64\n\
+enabled=1\n\
+gpgcheck=1\n\
+repo_gpgcheck=1\n\
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg\n\
+exclude=kube*" > /etc/yum.repos.d/kubernetes.repo
+
+RUN yum install -y kubeadm --disableexcludes=kubernetes
+RUN echo "KUBELET_EXTRA_ARGS=--cgroup-driver=systemd" > /etc/sysconfig/kubelet
+
+EXPOSE 22
+CMD ["/usr/sbin/sshd", "-D"]
+CMD /sbin/init
