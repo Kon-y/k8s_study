@@ -31,7 +31,7 @@ COPY ../chrony/chrony.conf /etc
 RUN systemctl enable chronyd.service
 RUN systemctl enable sshd.service
 RUN ln -sf /usr/share/zoneinfo/Asia/Tokyo /etc/localtime
-RUN echo 'root:aslinux' | chpasswd
+RUN echo 'root:rooty' | chpasswd
 RUN ssh-keygen -t rsa -f /etc/ssh/ssh_host_rsa_key -N ''
 RUN systemctl disable firewalld
 
